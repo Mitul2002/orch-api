@@ -8,7 +8,7 @@ from typing import Dict, Tuple
 app = FastAPI()
 
 # Set the base path to a fixed directory
-BASE_PATH = "clean/"  # Adjust this path as necessary
+BASE_PATH = "clean/"  # Adjust this path as necessary for your project structure
 
 class SearchRequest(BaseModel):
     target_spend: float
@@ -16,7 +16,13 @@ class SearchRequest(BaseModel):
     tolerance: float
     top_n: int
 
+@app.get("/")
+async def read_root():
+    """Root endpoint returning a welcome message."""
+    return {"message": "Welcome to the Contract Search API!"}
+
 def parse_spend(spend_str: str) -> float:
+    """Convert spend string (like $670K or $2.2M) to float value."""
     spend_str = spend_str.replace('$', '').replace(',', '')
     if 'M' in spend_str:
         return float(spend_str.replace('M', '')) * 1_000_000
@@ -25,16 +31,19 @@ def parse_spend(spend_str: str) -> float:
     return float(spend_str)
 
 def format_spend(spend: float) -> str:
+    """Convert float value back to K/M format."""
     if spend >= 1_000_000:
         return f"${spend / 1_000_000:.1f}M"
     return f"${spend / 1_000:.0f}K"
 
 def get_spend_range(spend: float, tolerance: float) -> Tuple[float, float]:
+    """Calculate spend range based on tolerance."""
     lower = spend * (1 - tolerance)
     upper = spend * (1 + tolerance)
     return lower, upper
 
 def normalize_discount(discount: float) -> float:
+    """Normalize discount value by dividing by 100 if it's greater than 100."""
     return discount / 100 if discount > 100 else discount
 
 def search_contracts(
@@ -43,11 +52,16 @@ def search_contracts(
     tolerance: float,
     top_n: int
 ) -> Dict:
+    """Search contracts to find the best and worst discounts within the specified range."""
     lower_spend, upper_spend = get_spend_range(target_spend, tolerance)
     carrier_path = os.path.join(BASE_PATH, carrier)
     
     contracts_data = []
     
+    # Check if the carrier directory exists
+    if not os.path.exists(carrier_path):
+        raise HTTPException(status_code=404, detail=f"Carrier directory '{carrier_path}' not found.")
+
     for filename in os.listdir(carrier_path):
         if filename.endswith('.csv'):
             spend_match = re.search(r'\$(.+?)\.csv', filename)
@@ -101,7 +115,7 @@ def search_contracts(
 
     results = {
         'range': f"({format_spend(lower_spend)}-{format_spend(upper_spend)})",
-        'confidence': f"no of contracts in this range: {len(contracts_data)}",
+        'confidence': f"Number of contracts in this range: {len(contracts_data)}",
         'top_services': {}
     }
     
@@ -115,6 +129,7 @@ def search_contracts(
 
 @app.post("/search_contracts/")
 async def search_contracts_endpoint(request: SearchRequest):
+    """Endpoint for searching contracts based on the request parameters."""
     try:
         results = search_contracts(
             request.target_spend,
@@ -124,7 +139,7 @@ async def search_contracts_endpoint(request: SearchRequest):
         )
         return results
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
 
 # To run the app, use the following command in the terminal:
-# uvicorn script_name:app --reload
+# uvicorn app:app --host 0.0.0.0 --port $PORT --reload
