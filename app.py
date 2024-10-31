@@ -3,12 +3,14 @@ from pydantic import BaseModel
 import pandas as pd
 import os
 import re
-from typing import Dict, List, Tuple
+from typing import Dict, Tuple
 
 app = FastAPI()
 
+# Set the base path to a fixed directory
+BASE_PATH = "clean/"  # Adjust this path as necessary
+
 class SearchRequest(BaseModel):
-    base_path: str
     target_spend: float
     carrier: str
     tolerance: float
@@ -36,14 +38,13 @@ def normalize_discount(discount: float) -> float:
     return discount / 100 if discount > 100 else discount
 
 def search_contracts(
-    base_path: str,
     target_spend: float,
     carrier: str,
     tolerance: float,
     top_n: int
 ) -> Dict:
     lower_spend, upper_spend = get_spend_range(target_spend, tolerance)
-    carrier_path = os.path.join(base_path, carrier)
+    carrier_path = os.path.join(BASE_PATH, carrier)
     
     contracts_data = []
     
@@ -116,7 +117,6 @@ def search_contracts(
 async def search_contracts_endpoint(request: SearchRequest):
     try:
         results = search_contracts(
-            request.base_path,
             request.target_spend,
             request.carrier,
             request.tolerance,
