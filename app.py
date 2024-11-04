@@ -3,7 +3,7 @@ from pydantic import BaseModel
 import pandas as pd
 import os
 import re
-from typing import Dict, List, Tuple
+from typing import Dict
 from statistics import mean
 
 app = FastAPI()
@@ -12,12 +12,17 @@ app = FastAPI()
 BASE_PATH = "clean/"
 
 class SearchRequest(BaseModel):
-    target_spend: float
-    carrier: str
-    tolerance: float
+    target_spend: float  # Target spend amount as a float
+    carrier: str         # Carrier, e.g., 'UPS' or 'FedEx'
+    tolerance: float     # Tolerance as a decimal (e.g., 0.2 for 20%)
+    top_n: int          # Number of top service levels to return
+
+def normalize_discount(discount: float) -> float:
+    """Normalize discount value by dividing by 100 if it's greater than 100."""
+    return discount / 100 if discount > 100 else discount
 
 def parse_spend(spend_str: str) -> float:
-    """Convert spend string (like $670K or $2.2M) to float value"""
+    """Convert spend string from filename (like $670K or $2.2M) to float value."""
     spend_str = spend_str.replace('$', '').replace(',', '')
     if 'M' in spend_str:
         return float(spend_str.replace('M', '')) * 1_000_000
@@ -25,25 +30,21 @@ def parse_spend(spend_str: str) -> float:
         return float(spend_str.replace('K', '')) * 1_000
     return float(spend_str)
 
-def normalize_discount(discount: float) -> float:
-    """Normalize discount value by dividing by 100 if it's greater than 100"""
-    if discount > 100:
-        return discount / 100
-    return discount
-
 def analyze_contracts(
     target_spend: float,
     carrier: str,
     tolerance: float,
+    top_n: int
 ) -> Dict:
     """
     Analyze contracts to get statistics for each service level.
-    
+
     Args:
-        target_spend: Target spend amount in absolute value
+        target_spend: Target spend amount as float
         carrier: 'UPS' or 'FedEx'
-        tolerance: Tolerance range as decimal (e.g., 0.2 for 20%)
-        
+        tolerance: Tolerance range as decimal
+        top_n: Number of top service levels to return
+
     Returns:
         Dictionary containing service level statistics
     """
@@ -51,9 +52,8 @@ def analyze_contracts(
     upper_spend = target_spend * (1 + tolerance)
     carrier_path = os.path.join(BASE_PATH, carrier)
     
-    # Dictionary to store discounts by service level
     service_discounts = {}
-    
+
     # Read all contract files in the carrier directory
     for filename in os.listdir(carrier_path):
         if filename.endswith('.csv'):
@@ -77,10 +77,9 @@ def analyze_contracts(
                         except (ValueError, TypeError):
                             continue  # Skip invalid values
     
-    # Calculate statistics for each service level
     service_stats = {}
     for service, discounts in service_discounts.items():
-        if discounts:  # Only process if we have valid discounts
+        if discounts:
             service_stats[service] = {
                 'avg_discount': mean(discounts),
                 'min_discount': min(discounts),
@@ -88,33 +87,35 @@ def analyze_contracts(
                 'contract_count': len(discounts),
                 'discount_values': sorted(discounts)
             }
+
+    # Sort by average discount and get top N
+    sorted_services = dict(sorted(
+        service_stats.items(),
+        key=lambda x: x[1]['avg_discount'],
+        reverse=True
+    )[:top_n])
     
-    return service_stats
+    return sorted_services
 
 @app.post("/analyze_contracts/")
 async def analyze_contracts_endpoint(request: SearchRequest):
+    """Endpoint to analyze contracts based on request parameters."""
     try:
         results = analyze_contracts(
             request.target_spend,
             request.carrier,
-            request.tolerance
+            request.tolerance,
+            request.top_n
         )
         return format_results(results)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 def format_results(stats: Dict) -> str:
-    """Format results dictionary into the requested output string"""
+    """Format results dictionary into the requested output string."""
     output = []
     
-    # Sort services by average discount for consistent output
-    sorted_services = sorted(
-        stats.items(),
-        key=lambda x: x[1]['avg_discount'],
-        reverse=True
-    )
-    
-    for service, data in sorted_services:
+    for service, data in stats.items():
         service_output = [
             f"\nService Level: {service}",
             f"Average Discount: {data['avg_discount']:.3f}%",
@@ -127,4 +128,9 @@ def format_results(stats: Dict) -> str:
     
     return "\n".join(output)
 
-# Run with: uvicorn filename:app --reload
+@app.get("/")
+async def read_root():
+    """Root endpoint for health check."""
+    return {"message": "Welcome to the Contract Analysis API!"}
+
+# Run the app using: uvicorn app:app --host 0.0.0.0 --port 8000 --reload
