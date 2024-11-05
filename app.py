@@ -112,17 +112,23 @@ async def analyze_contracts_endpoint(request: SearchRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 def format_results(stats: Dict) -> str:
-    """Format results dictionary into the requested output string."""
+    """Format results dictionary into the requested output string"""
     output = []
     
     for service, data in stats.items():
+        # Multiply percentage values by 100 for display
+        avg_discount = data['avg_discount'] * 100
+        min_discount = data['min_discount'] * 100
+        max_discount = data['max_discount'] * 100
+        discount_values = [d * 100 for d in data['discount_values']]
+        
         service_output = [
             f"\nService Level: {service}",
-            f"Average Discount: {data['avg_discount']:.3f}%",
-            f"Min Discount: {data['min_discount']:.3f}%",
-            f"Max Discount: {data['max_discount']:.3f}%",
+            f"Average Discount: {avg_discount:.2f}%",
+            f"Min Discount: {min_discount:.2f}%",
+            f"Max Discount: {max_discount:.2f}%",
             f"Contract Count: {data['contract_count']}",
-            f"Discount Values: {', '.join(f'{d:.3f}%' for d in data['discount_values'])}"
+            f"Discount Values: {', '.join(f'{d:.2f}%' for d in discount_values)}"
         ]
         output.extend(service_output)
     
