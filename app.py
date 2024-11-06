@@ -124,11 +124,11 @@ def format_results(stats: Dict) -> str:
         
         service_output = [
             f"\nService Level: {service}",
-            f"Average Discount: {avg_discount:.2f}%",
-            f"Min Discount: {min_discount:.2f}%",
-            f"Max Discount: {max_discount:.2f}%",
+            f"Average Discount: {avg_discount:.2f}",
+            f"Min Discount: {min_discount:.2f}",
+            f"Max Discount: {max_discount:.2f}",
             f"Contract Count: {data['contract_count']}",
-            f"Discount Values: {', '.join(f'{d:.2f}%' for d in discount_values)}"
+            f"Discount Values: {', '.join(f'{d:.2f}' for d in discount_values)}"
         ]
         output.extend(service_output)
     
